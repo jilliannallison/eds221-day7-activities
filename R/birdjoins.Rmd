@@ -1,0 +1,104 @@
+---
+title: "Bird joins!"
+author: "Jillian Allison"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(janitor)
+library(here)
+library(lubridate)
+library(datapasta)
+```
+
+### Task 1
+
+```{r}
+# bird_observations, sites, surveys, and taxalist
+
+bird_observations <- read_csv(here("data","knb-lter-cap.256.9","52_pp52_birds_1.csv"))
+sites <- read_csv(here("data","knb-lter-cap.256.9","52_pp52_sites_1.csv"))
+surveys <- read_csv(here("data","knb-lter-cap.256.9","52_pp52_surveys_1.csv"))
+taxalist <- read_csv(here("data","knb-lter-cap.256.9","52_pp52_taxalist_1.csv"))
+```
+
+Create a subset of bird_observations called birds_subset that only contains observations for birds with species id “BHCO” and “RWBL”, and from sites with site ID “LI-W” and “NU-C”
+
+```{r}
+birds_subset <- bird_observations %>%
+  filter(species_id %in% c("BHCO","RWBL"), 
+         site_id %in% c("LI-W", "NU-C"))
+```
+
+Use left join(s) to update birds_subset so that it also includes sites and taxalist information. For each join, include an explicit argument saying which variable you are joining by (even if it will just assume the correct one for you). Store the updated data frame as birds_left. Make sure to look at the output - is what it contains consistent with what you expected it to contain?
+
+```{r}
+birds_left <- left_join(birds_subset, sites, by = "site_id", ) %>%
+  left_join(taxalist, by = "species_id")
+```
+
+Write code to full_join the birds_subset and sites data into a new object called birds_full. Explicitly include the variable you’re joining by. Look at the output. Is it what you expected?
+
+```{r}
+birds_full <- full_join(birds_subset, sites, by = "site_id")
+```
+
+Write code to inner_join() the birds_subset and taxalist, called birds_inner. Include an argument for what variable you’ll be joining by.
+
+```{r}
+birds_inner <- inner_join(birds_subset, taxalist, by = "species_id")
+birds_inner_left_test <- left_join(birds_subset, taxalist, by = "species_id")
+```
+
+### Task 2
+Rename the notes column to prevent conflicts. 
+```{r}
+bird_observations %>% 
+  rename(bird_obs_notes = notes)
+```
+
+Then, create a subset that contains all observations in the birds dataset, joins the taxonomic, site and survey information to it, and is finally limited to only columns survey_date, common_name, park_name, and bird_count. You can decide the order that you want to create this in (e.g. limit the columns first, then join, or the other way around).
+```{r}
+birds_taxjoin <- left_join(bird_observations, taxalist, by = "species_id")
+birds_sitesjoin <-  left_join(birds_taxjoin, sites, by = "site_id") 
+birds <-  left_join(birds_sitesjoin, surveys, by = c("site_id","survey_id")) %>% 
+  select(survey_date, common_name, park_name, bird_count)
+```
+
+Use lubridate::month() to add a new column called survey_month, containing only the month number. Then, convert the month number to a factor (again within mutate())
+then....
+Learn a new function on your own! Use dplyr::relocate() to move the new survey_month column to immediately after the survey_date column. You can do this in a separate code chunk, or pipe straight into it from your existing code.
+```{r}
+birds <- birds %>% 
+  mutate(survey_month = lubridate::month(lubridate::ymd(survey_date))) %>% 
+  relocate(survey_month, .after = survey_date) 
+
+birds_month_park <- birds %>% 
+  group_by(park_name, survey_month) %>%
+  summarize(total = sum(bird_count)) %>%
+  filter(park_name %in% c("Lindo", "Orme", "Palomino", "Sonrisa"))
+```
+
+### Task 3: string practice
+```{r}
+alarm_report <- tibble::tribble(
+                         ~date,           ~building,                                              ~alarm_message,
+                  "2020-03-14", "Engineering-North", "10:02am - HVAC system down, facilities management alerted",
+                  "2020-03-15",         "Bren Hall",                    "8:24am - Elevator North out of service",
+                  "2020-04-10", "Engineering-South",     "12:41am - Fire alarm, UCSB fire responded and cleared",
+                  "2020-04-18",        "Engr-North",     "9:58pm - Campus point emergency siren, UCPD responded"
+                  )
+
+
+alarm_report_wrangle <- alarm_report %>% 
+  mutate(building = str_replace(building, "Engr", "Engineering")) %>%
+  tidyr::separate(col = building, into = c("building", "wing"), sep = "-") %>%
+  filter(str_detect(alarm_message, pattern = "responded")) %>%
+  tidyr::separate(col = alarm_message, into = c("time", "message"), sep = "-") %>%
+  mutate(date = lubridate::ymd(date))
+
+```
+
